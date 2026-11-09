@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "model_spec.schema.yaml",
   "title": "BEAM model spec",
-  "description": "Structural spec for dbt model YAML (BEAM*/Kimball dimensions and facts). Covers shape, enums, required keys and single-document conditionals. Cross-reference rules (definitions cover every source, completes names a real source) are checked by the Specwright extension, not here.\n",
+  "description": "Structural spec for dbt model YAML (BEAM*/Kimball dimensions and facts). Covers shape, enums, required keys and single-document conditionals. Cross-reference rules (definitions cover every source, completes names a real source) are checked by the YAML Spec Blocks extension, not here.\n",
   "type": "object",
   "required": [
     "version",

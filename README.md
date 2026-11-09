@@ -1,6 +1,8 @@
-# Specwright
+# YAML Spec Blocks
 
 [![Support on Ko-fi](https://img.shields.io/badge/Ko--fi-support-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/skouzini)
+
+*Formerly **Specwright** (renamed in 0.2.0 to avoid clashing with several unrelated "Specwright" projects).*
 
 A VS Code extension that suggests the right YAML block for where your cursor
 is in a dbt model file, fills it in from the model you're editing, and flags
@@ -19,23 +21,23 @@ Model YAML follows a spec written in the style of Snowflake's docs
 hand means remembering which blocks are required in which situation:
 `definitions` needs one entry per source, `combine: union` only with 2+ sources,
 `fact_type` and `additivity` only on facts, `completes` requires `match`, and so
-on. Specwright puts that knowledge in the editor:
+on. YAML Spec Blocks puts that knowledge in the editor:
 
 | Need | Where it's handled |
 |---|---|
 | Shape, enums, required keys, simple conditionals | JSON Schema → validated live by the Red Hat YAML extension |
-| "What can go here?" + pre-filled blocks | Specwright completions (`x-blocks`, `x-when`, `x-keys`) |
-| Rules that compare one part of a file with another | Specwright diagnostics (`src/core/lint.ts`) |
+| "What can go here?" + pre-filled blocks | YAML Spec Blocks completions (`x-blocks`, `x-when`, `x-keys`) |
+| Rules that compare one part of a file with another | YAML Spec Blocks diagnostics (`src/core/lint.ts`) |
 | Judgment calls (is this filter intent clear?) | Human / agent review — out of scope |
 
 ## Using it
 
 ### Install
-1. `npm install && npm run package` → `specwright-0.1.0.vsix`
+1. `npm install && npm run package` → `yaml-spec-blocks-0.2.0.vsix`
    (a built copy may already be in the folder; it's git-ignored).
 2. VS Code → Extensions → `…` → **Install from VSIX**.
-3. In the dbt repo, put the schema at `schemas/model_spec.schema.yaml`. Specwright
-   finds it there automatically (or set `specwright.schemaPath`), reloads on
+3. In the dbt repo, put the schema at `schemas/model_spec.schema.yaml`. YAML Spec Blocks
+   finds it there automatically (or set `yamlSpecBlocks.schemaPath`), reloads on
    save, and writes a `.json` copy next to it.
 4. For validation underlines, install **YAML** (Red Hat) and add to the dbt
    repo's `.vscode/settings.json`:
@@ -57,11 +59,11 @@ on. Specwright puts that knowledge in the editor:
 ### Settings
 | Setting | Default | |
 |---|---|---|
-| `specwright.schemaPath` | `""` | Schema file; empty = `schemas/model_spec.schema.yaml` / `.json` in the workspace, else the bundled copy |
-| `specwright.include` | `**/models/**/*.{yml,yaml}` | Which YAML files Specwright works in |
-| `specwright.suggestOnNewLine` | `true` | Open suggestions after Enter when something fits |
-| `specwright.lint` | `true` | Cross-reference warnings |
-| `specwright.syncJsonSchema` | `true` | Keep `model_spec.schema.json` in sync with the YAML schema |
+| `yamlSpecBlocks.schemaPath` | `""` | Schema file; empty = `schemas/model_spec.schema.yaml` / `.json` in the workspace, else the bundled copy |
+| `yamlSpecBlocks.include` | `**/models/**/*.{yml,yaml}` | Which YAML files YAML Spec Blocks works in |
+| `yamlSpecBlocks.suggestOnNewLine` | `true` | Open suggestions after Enter when something fits |
+| `yamlSpecBlocks.lint` | `true` | Cross-reference warnings |
+| `yamlSpecBlocks.syncJsonSchema` | `true` | Keep `model_spec.schema.json` in sync with the YAML schema |
 
 ---
 
@@ -76,8 +78,8 @@ cursor ──► context.ts ──► schema.ts ──► offers.ts ──► te
 
 1. **Where is the cursor?** (`src/core/context.ts`)
    The cursor is usually on a blank or half-typed line, which YAML can't place.
-   So we temporarily write a marker (`__specwright_cursor__: 0`) on that line —
-   once as a new key, once as a new list item (`- __specwright_cursor__: 0`) —
+   So we temporarily write a marker (`__yaml_spec_blocks_cursor__: 0`) on that line —
+   once as a new key, once as a new list item (`- __yaml_spec_blocks_cursor__: 0`) —
    parse with the `yaml` package, and see where the marker landed. Whichever
    attempt parses cleanly gives a context:
    - `key` context: the path of the map the new key goes into, plus its existing keys
@@ -114,7 +116,7 @@ cursor ──► context.ts ──► schema.ts ──► offers.ts ──► te
 loading/watching, completion provider, the Insert Block quick pick, the status
 bar, auto-suggest on Enter, and diagnostics.
 
-## The schema's Specwright keywords
+## The schema's YAML Spec Blocks keywords
 
 Validators ignore unknown keywords, so these don't affect validation.
 
@@ -157,7 +159,7 @@ x-when:
 inside that map, offer one entry per missing value, using
 `additionalProperties`' blocks as the entry body.
 
-To add a block: add an `x-blocks` entry in the right `$defs` node, save — Specwright reloads.
+To add a block: add an `x-blocks` entry in the right `$defs` node, save — YAML Spec Blocks reloads.
 
 ## Project layout
 
@@ -187,7 +189,7 @@ npm install
 npm test            # engine checks + insertion checks
 npm run typecheck
 npm run build       # esbuild → dist/extension.js
-npm run package     # → specwright-<version>.vsix
+npm run package     # → yaml-spec-blocks-<version>.vsix
 ```
 To debug inside VS Code: open this folder, press F5 with a launch config of
 type `extensionHost` (not included yet), and open a model file in the
@@ -200,7 +202,7 @@ offer labels / snippet text. Add a case there for every new behaviour.
 ## Decisions (and why)
 
 - **JSON Schema + extensions, not a custom spec language.** Standard tooling
-  (validators, Red Hat YAML, `check-jsonschema`) works for free; Specwright adds
+  (validators, Red Hat YAML, `check-jsonschema`) works for free; YAML Spec Blocks adds
   only what JSON Schema can't express.
 - **Blocks in `x-blocks`, not `defaultSnippets`.** The Red Hat extension shows
   `defaultSnippets` itself, unfilled, which duplicated every suggestion.
@@ -235,7 +237,7 @@ offer labels / snippet text. Add a case there for every new behaviour.
 
 ## Support
 
-If Specwright saves you time, you can buy me a coffee on [Ko-fi](https://ko-fi.com/skouzini).
+If YAML Spec Blocks saves you time, you can buy me a coffee on [Ko-fi](https://ko-fi.com/skouzini).
 
 ## License
 

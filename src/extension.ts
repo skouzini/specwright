@@ -13,7 +13,7 @@ let diagnostics: vscode.DiagnosticCollection;
 let status: vscode.StatusBarItem;
 let ext: vscode.ExtensionContext;
 
-const cfg = () => vscode.workspace.getConfiguration('specwright');
+const cfg = () => vscode.workspace.getConfiguration('yamlSpecBlocks');
 
 // ── schema ────────────────────────────────────────────────────────────
 function schemaCandidates(): string[] {
@@ -43,7 +43,7 @@ function loadSchema(): void {
       syncJson(file, data);
       return;
     } catch (err) {
-      vscode.window.showWarningMessage(`Specwright: couldn't read schema ${file}: ${(err as Error).message}`);
+      vscode.window.showWarningMessage(`YAML Spec Blocks: couldn't read schema ${file}: ${(err as Error).message}`);
     }
   }
   index = undefined;
@@ -76,7 +76,7 @@ function toItem(doc: vscode.TextDocument, o: Offer, i: number): vscode.Completio
   const kind = o.kind === 'block' ? vscode.CompletionItemKind.Snippet
     : o.kind === 'entry' ? vscode.CompletionItemKind.Field
     : vscode.CompletionItemKind.Property;
-  const item = new vscode.CompletionItem({ label: o.label, description: 'Specwright' }, kind);
+  const item = new vscode.CompletionItem({ label: o.label, description: 'YAML Spec Blocks' }, kind);
   item.detail = o.detail;
   item.documentation = new vscode.MarkdownString().appendCodeblock(o.preview, 'yaml');
   item.insertText = new vscode.SnippetString(o.snippet);
@@ -104,7 +104,7 @@ async function insertBlock(): Promise<void> {
   const offers = offersAt(index, doc.getText(), doc.offsetAt(editor.selection.active));
   if (!offers.length) {
     vscode.window.showInformationMessage(
-      'Specwright: nothing fits here. Put the cursor on an empty line, at the indentation where the new key or list item belongs.');
+      'YAML Spec Blocks: nothing fits here. Put the cursor on an empty line, at the indentation where the new key or list item belongs.');
     return;
   }
   const where = formatPath(offers[0].ctx.path);
@@ -155,7 +155,7 @@ function updateStatus(): void {
     }
     if (!label) { status.hide(); return; }
     status.text = `$(symbol-structure) ${label}`;
-    status.tooltip = `Specwright — click to insert a block here\nSchema: ${schemaFile || 'none found'}`;
+    status.tooltip = `YAML Spec Blocks — click to insert a block here\nSchema: ${schemaFile || 'none found'}`;
     status.show();
   }, 120);
 }
@@ -170,7 +170,7 @@ function refreshDiagnostics(doc: vscode.TextDocument): void {
     const found = lint(doc.getText()).map((f) => {
       const d = new vscode.Diagnostic(new vscode.Range(doc.positionAt(f.start), doc.positionAt(f.end)), f.message, vscode.DiagnosticSeverity.Warning);
       d.code = f.code;
-      d.source = 'specwright';
+      d.source = 'yaml-spec-blocks';
       return d;
     });
     diagnostics.set(doc.uri, found);
@@ -182,9 +182,9 @@ export function activate(context: vscode.ExtensionContext): void {
   ext = context;
   loadSchema();
 
-  diagnostics = vscode.languages.createDiagnosticCollection('specwright');
+  diagnostics = vscode.languages.createDiagnosticCollection('yaml-spec-blocks');
   status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
-  status.command = 'specwright.insertBlock';
+  status.command = 'yamlSpecBlocks.insertBlock';
 
   const watcher = vscode.workspace.createFileSystemWatcher('**/*.schema.{yaml,yml,json}');
   const onSchema = (uri: vscode.Uri) => {
@@ -195,13 +195,13 @@ export function activate(context: vscode.ExtensionContext): void {
     diagnostics, status, watcher,
     watcher.onDidChange(onSchema), watcher.onDidCreate(onSchema), watcher.onDidDelete(onSchema),
     vscode.languages.registerCompletionItemProvider({ language: 'yaml' }, completionProvider, '-'),
-    vscode.commands.registerCommand('specwright.insertBlock', insertBlock),
-    vscode.commands.registerCommand('specwright.reloadSchema', () => {
+    vscode.commands.registerCommand('yamlSpecBlocks.insertBlock', insertBlock),
+    vscode.commands.registerCommand('yamlSpecBlocks.reloadSchema', () => {
       loadSchema();
-      vscode.window.showInformationMessage(index ? `Specwright: using ${schemaFile}` : 'Specwright: no schema found');
+      vscode.window.showInformationMessage(index ? `YAML Spec Blocks: using ${schemaFile}` : 'YAML Spec Blocks: no schema found');
     }),
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration('specwright')) {
+      if (e.affectsConfiguration('yamlSpecBlocks')) {
         loadSchema();
         vscode.workspace.textDocuments.forEach(refreshDiagnostics);
       }

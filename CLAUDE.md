@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Specwright: VS Code extension for cursor-aware, pre-filled block suggestions in
+YAML Spec Blocks: VS Code extension for cursor-aware, pre-filled block suggestions in
 dbt model YAML, driven by `schemas/model_spec.schema.yaml`. Read `README.md`
 first — it covers architecture, the `x-blocks` / `x-when` / `x-keys` keywords,
 and decisions.
@@ -9,7 +9,7 @@ and decisions.
 - `npm install` once
 - `npm test` — must pass before any commit (engine checks + insertion checks)
 - `npm run typecheck`
-- `npm run package` — builds `specwright-<version>.vsix`
+- `npm run package` — builds `yaml-spec-blocks-<version>.vsix`
 
 ## Rules of thumb
 - Edit `schemas/model_spec.schema.yaml`, never the `.json` (it's generated;

@@ -1,18 +1,18 @@
 {
-  "name": "specwright",
-  "displayName": "Specwright",
+  "name": "yaml-spec-blocks",
+  "displayName": "YAML Spec Blocks",
   "description": "Cursor-aware block suggestions for dbt model YAML, filled from the model you're editing, plus cross-reference checks.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "skouzini",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/skouzini/specwright"
+    "url": "https://github.com/skouzini/yaml-spec-blocks"
   },
   "bugs": {
-    "url": "https://github.com/skouzini/specwright/issues"
+    "url": "https://github.com/skouzini/yaml-spec-blocks/issues"
   },
-  "homepage": "https://github.com/skouzini/specwright#readme",
+  "homepage": "https://github.com/skouzini/yaml-spec-blocks#readme",
   "sponsor": {
     "url": "https://ko-fi.com/skouzini"
   },
@@ -46,46 +46,46 @@
   "contributes": {
     "commands": [
       {
-        "command": "specwright.insertBlock",
-        "title": "Specwright: Insert Block Here"
+        "command": "yamlSpecBlocks.insertBlock",
+        "title": "YAML Spec Blocks: Insert Block Here"
       },
       {
-        "command": "specwright.reloadSchema",
-        "title": "Specwright: Reload Schema"
+        "command": "yamlSpecBlocks.reloadSchema",
+        "title": "YAML Spec Blocks: Reload Schema"
       }
     ],
     "keybindings": [
       {
-        "command": "specwright.insertBlock",
+        "command": "yamlSpecBlocks.insertBlock",
         "key": "ctrl+alt+enter",
         "mac": "cmd+alt+enter",
         "when": "editorTextFocus && editorLangId == yaml"
       }
     ],
     "configuration": {
-      "title": "Specwright",
+      "title": "YAML Spec Blocks",
       "properties": {
-        "specwright.schemaPath": {
+        "yamlSpecBlocks.schemaPath": {
           "type": "string",
           "default": "",
           "markdownDescription": "Schema file (YAML or JSON), absolute or relative to the workspace folder. Empty: `schemas/model_spec.schema.yaml` (or `.json`) in the workspace, else the schema bundled with the extension."
         },
-        "specwright.include": {
+        "yamlSpecBlocks.include": {
           "type": "string",
           "default": "**/models/**/*.{yml,yaml}",
-          "description": "Glob of the model YAML files Specwright works in."
+          "description": "Glob of the model YAML files YAML Spec Blocks works in."
         },
-        "specwright.suggestOnNewLine": {
+        "yamlSpecBlocks.suggestOnNewLine": {
           "type": "boolean",
           "default": true,
           "description": "Open suggestions automatically when Enter lands on a line where blocks or keys fit."
         },
-        "specwright.lint": {
+        "yamlSpecBlocks.lint": {
           "type": "boolean",
           "default": true,
           "description": "Warn about cross-reference problems (definitions vs sources, completes targets)."
         },
-        "specwright.syncJsonSchema": {
+        "yamlSpecBlocks.syncJsonSchema": {
           "type": "boolean",
           "default": true,
           "description": "When the schema is YAML, keep a .json copy beside it (for the Red Hat YAML extension's validation)."

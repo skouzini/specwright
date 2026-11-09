@@ -5,10 +5,10 @@ description: >
   Structural spec for dbt model YAML (BEAM*/Kimball dimensions and facts).
   Covers shape, enums, required keys and single-document conditionals.
   Cross-reference rules (definitions cover every source, completes names a
-  real source) are checked by the Specwright extension, not here.
+  real source) are checked by the YAML Spec Blocks extension, not here.
 
-# ── Specwright keywords (ignored by JSON Schema validators) ─────────────
-# x-blocks  Blocks Specwright can insert as a VALUE of this schema.
+# ── YAML Spec Blocks keywords (ignored by JSON Schema validators) ─────────────
+# x-blocks  Blocks YAML Spec Blocks can insert as a VALUE of this schema.
 #           body: YAML text. Placeholders:
 #             <name>          tab stop, "name" as its default text
 #             <a|b|c>         tab stop with a dropdown of choices
