@@ -1,0 +1,73 @@
+version: 2
+
+models:
+  - name: SUBSCRIPTIONS
+    description: "Plans a customer subscribes to, per product."
+    config:
+      meta:
+        table_type: fact
+        status: current
+        grain: one row per customer, product and plan
+        combine: union
+        sources:
+          - name: subscriptions
+            description: Active and past subscriptions
+            table: SHOP.RAW.SUBSCRIPTIONS
+            filter: all
+            watermark: UPDATED_AT
+            match: "CUSTOMER_ID, PRODUCT_ID where IS_ACTIVE = true"
+            match_pick: first-seen row
+          - name: cancelled_subscriptions
+            description: Cancelled subscriptions
+            table: SHOP.RAW.SUBSCRIPTIONS_CANCELLED
+            filter: all
+            watermark: DELETED_AT
+            completes: [subscriptions, subscription]
+            match: "CUSTOMER_ID, PRODUCT_ID where IS_ACTIVE = true"
+        review:
+          verified_date: "2026-11-01"
+          verified_by: Josh
+          verified_against: source tables
+          notes: Looks good.
+    constraints:
+      - type: primary_key
+        columns: [CUSTOMER_ID, PRODUCT_ID, PLAN_CODE]
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [CUSTOMER_ID, PRODUCT_ID, PLAN_CODE]
+    columns:
+      - name: CUSTOMER_ID
+        data_type: NUMBER
+        description: "Customer id"
+        meta:
+          codes: [CUST]
+          display_name: Customer Id
+          default_value: "-1"
+          definitions:
+            subscriptions:
+              column: SHOP.RAW.SUBSCRIPTIONS.CUSTID
+              transform: direct
+            cancelled_subscriptions:
+              column: SHOP.RAW.SUBSCRIPTIONS_CANCELLED.CUSTID
+              transform: direct
+      - name: PRODUCT_ID
+        data_type: VARCHAR
+        description: "Product"
+        meta:
+          codes: [PROD]
+          display_name: Product Id
+          default_value: "UNKNOWN"
+          source: [CUSTOMER_ID]
+          transform: lookup
+      - name: PLAN_CODE
+        data_type: VARCHAR
+        description: "Plan code"
+        meta:
+          codes: [PLAN]
+          display_name: Plan Code
+          default_value: "UNK"
+          definitions:
+            subscriptions:
+              column: SHOP.RAW.SUBSCRIPTIONS.PLANCD
+              transform: direct
+            trial_subscriptions: default

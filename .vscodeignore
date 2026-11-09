@@ -1,0 +1,8 @@
+src/**
+test/**
+node_modules/**
+tsconfig.json
+**/*.map
+CLAUDE.md
+.gitignore
+.github/**

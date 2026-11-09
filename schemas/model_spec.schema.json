@@ -1,0 +1,858 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "model_spec.schema.yaml",
+  "title": "BEAM model spec",
+  "description": "Structural spec for dbt model YAML (BEAM*/Kimball dimensions and facts). Covers shape, enums, required keys and single-document conditionals. Cross-reference rules (definitions cover every source, completes names a real source) are checked by the Specwright extension, not here.\n",
+  "type": "object",
+  "required": [
+    "version",
+    "models"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 2
+    },
+    "models": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/model"
+      }
+    }
+  },
+  "$defs": {
+    "upper_snake": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$"
+    },
+    "source_label": {
+      "description": "Source label, lower_snake_case (e.g. subscriptions).",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(_[a-z0-9]+)*$"
+    },
+    "iso_date": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "table_ref": {
+      "description": "Fully qualified table reference (DATABASE.SCHEMA.TABLE).",
+      "type": "string",
+      "pattern": "^[^.\\s]+\\.[^.\\s]+\\.[^.\\s]+$"
+    },
+    "column_ref": {
+      "description": "Fully qualified column path (DATABASE.SCHEMA.TABLE.COLUMN).",
+      "type": "string",
+      "pattern": "^[^.\\s]+\\.[^.\\s]+\\.[^.\\s]+\\.[^.\\s]+$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1
+    },
+    "transform": {
+      "description": "\"direct\", or the transformation rules in words.",
+      "type": "string",
+      "minLength": 1
+    },
+    "model": {
+      "type": "object",
+      "required": [
+        "name",
+        "description",
+        "config",
+        "constraints",
+        "data_tests",
+        "columns"
+      ],
+      "additionalProperties": false,
+      "x-blocks": [
+        {
+          "label": "Model",
+          "detail": "Full model skeleton with one source and one column",
+          "body": "name: <MODEL_NAME>\ndescription: \"<model description>\"\nconfig:\n  meta:\n    table_type: <dimension|fact>\n    status: <planned|current|deprecated>\n    grain: <grain definition>\n    sources:\n      - name: <source_label>\n        description: <source rationale>\n        table: <DATABASE.SCHEMA.TABLE>\n        filter: <all>\n        watermark: <WATERMARK_COLUMN>\n    review:\n      verified_date: \"<YYYY-MM-DD>\"\n      verified_by: <name>\n      verified_against: <what the spec was checked against>\n      notes: <current state / open issues>\nconstraints:\n  - type: primary_key\n    columns: [<KEY_COLUMN>]\ndata_tests:\n  - dbt_utils.unique_combination_of_columns:\n      combination_of_columns:\n        - <GRAIN_COLUMN>\ncolumns:\n  - name: <COLUMN_NAME>\n    data_type: <VARCHAR>\n    description: \"<column description>\"\n    meta:\n      codes: [\"<CODE>\"]\n      display_name: <Column Name>\n      default_value: \"<UNKNOWN>\"\n"
+        }
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/upper_snake"
+        },
+        "description": {
+          "$ref": "#/$defs/text"
+        },
+        "deprecation_date": {
+          "$ref": "#/$defs/iso_date"
+        },
+        "config": {
+          "type": "object",
+          "required": [
+            "meta"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "meta": {
+              "$ref": "#/$defs/model_meta"
+            }
+          }
+        },
+        "constraints": {
+          "description": "Dimensions: the surrogate key only. Facts: every grain column.\n",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/primary_key_constraint"
+          }
+        },
+        "data_tests": {
+          "description": "Must include the grain test (dbt_utils.unique_combination_of_columns).",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/model_test"
+          },
+          "contains": {
+            "type": "object",
+            "required": [
+              "dbt_utils.unique_combination_of_columns"
+            ]
+          }
+        },
+        "columns": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/column"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "config"
+            ],
+            "properties": {
+              "config": {
+                "required": [
+                  "meta"
+                ],
+                "properties": {
+                  "meta": {
+                    "required": [
+                      "table_type"
+                    ],
+                    "properties": {
+                      "table_type": {
+                        "const": "dimension"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "constraints": {
+                "maxItems": 1,
+                "items": {
+                  "properties": {
+                    "columns": {
+                      "maxItems": 1
+                    }
+                  }
+                }
+              },
+              "columns": {
+                "items": {
+                  "properties": {
+                    "meta": {
+                      "properties": {
+                        "additivity": false
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "primary_key_constraint": {
+      "type": "object",
+      "required": [
+        "type",
+        "columns"
+      ],
+      "additionalProperties": false,
+      "x-blocks": [
+        {
+          "label": "Primary key (grain columns)",
+          "detail": "Facts — every grain column",
+          "x-when": {
+            "table_type": "fact"
+          },
+          "body": "type: primary_key\ncolumns: [[<grain_column>, ...]]\n"
+        },
+        {
+          "label": "Primary key (surrogate key)",
+          "detail": "Dimensions — the surrogate key only",
+          "x-when": {
+            "table_type": "dimension"
+          },
+          "body": "type: primary_key\ncolumns: [<SURROGATE_KEY>]\n"
+        }
+      ],
+      "properties": {
+        "type": {
+          "const": "primary_key"
+        },
+        "columns": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/upper_snake"
+          }
+        }
+      }
+    },
+    "model_test": {
+      "description": "A model-level dbt test. The grain test has a fixed shape; others are free-form.",
+      "x-blocks": [
+        {
+          "label": "Grain test",
+          "detail": "dbt_utils.unique_combination_of_columns on the grain",
+          "body": "dbt_utils.unique_combination_of_columns:\n  combination_of_columns:\n    - <GRAIN_COLUMN>\n"
+        },
+        {
+          "label": "Grain test (current rows)",
+          "detail": "Dimensions — grain test limited to IS_CURRENT rows",
+          "x-when": {
+            "table_type": "dimension"
+          },
+          "body": "dbt_utils.unique_combination_of_columns:\n  combination_of_columns:\n    - <GRAIN_COLUMN>\n  config:\n    where: \"IS_CURRENT = true\"\n"
+        },
+        {
+          "label": "Match uniqueness test",
+          "detail": "Required when a source's match uses fewer columns than the grain",
+          "body": "dbt_utils.unique_combination_of_columns:\n  combination_of_columns:\n    - <MATCH_COLUMN>\n  config:\n    where: \"<match condition>\"\n"
+        }
+      ],
+      "oneOf": [
+        {
+          "$ref": "#/$defs/grain_test"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 1,
+          "not": {
+            "required": [
+              "dbt_utils.unique_combination_of_columns"
+            ]
+          }
+        }
+      ]
+    },
+    "grain_test": {
+      "type": "object",
+      "required": [
+        "dbt_utils.unique_combination_of_columns"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "dbt_utils.unique_combination_of_columns": {
+          "type": "object",
+          "required": [
+            "combination_of_columns"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "combination_of_columns": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/upper_snake"
+              }
+            },
+            "config": {
+              "type": "object",
+              "required": [
+                "where"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "where": {
+                  "$ref": "#/$defs/text"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "model_meta": {
+      "type": "object",
+      "required": [
+        "table_type",
+        "status",
+        "grain",
+        "sources",
+        "review"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "table_type": {
+          "enum": [
+            "dimension",
+            "fact"
+          ]
+        },
+        "fact_type": {
+          "description": "Facts only.",
+          "x-when": {
+            "table_type": "fact"
+          },
+          "enum": [
+            "transaction",
+            "periodic_snapshot",
+            "accumulating_snapshot",
+            "factless"
+          ]
+        },
+        "status": {
+          "enum": [
+            "planned",
+            "current",
+            "deprecated"
+          ]
+        },
+        "grain": {
+          "$ref": "#/$defs/text"
+        },
+        "combine": {
+          "description": "Required with 2+ sources; omit with one source.",
+          "x-when": {
+            "source_count": {
+              "min": 2
+            }
+          },
+          "const": "union"
+        },
+        "sources": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/source"
+          }
+        },
+        "review": {
+          "$ref": "#/$defs/review"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "table_type"
+            ],
+            "properties": {
+              "table_type": {
+                "const": "dimension"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "fact_type": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "sources"
+            ],
+            "properties": {
+              "sources": {
+                "maxItems": 1
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "combine": false
+            }
+          },
+          "else": {
+            "required": [
+              "combine"
+            ]
+          }
+        }
+      ]
+    },
+    "review": {
+      "type": "object",
+      "required": [
+        "verified_date",
+        "verified_by",
+        "verified_against",
+        "notes"
+      ],
+      "additionalProperties": false,
+      "x-blocks": [
+        {
+          "label": "Review",
+          "body": "verified_date: \"<YYYY-MM-DD>\"\nverified_by: <name>\nverified_against: <what the spec was checked against>\nnotes: <current state / open issues>\n"
+        }
+      ],
+      "properties": {
+        "verified_date": {
+          "$ref": "#/$defs/iso_date"
+        },
+        "verified_by": {
+          "$ref": "#/$defs/text"
+        },
+        "verified_against": {
+          "$ref": "#/$defs/text"
+        },
+        "notes": {
+          "$ref": "#/$defs/text"
+        }
+      }
+    },
+    "source": {
+      "description": "A core table; every source adds rows of the grain.",
+      "type": "object",
+      "required": [
+        "name",
+        "description",
+        "table",
+        "filter",
+        "watermark"
+      ],
+      "additionalProperties": false,
+      "x-blocks": [
+        {
+          "label": "Source",
+          "detail": "Core table that adds rows of the grain",
+          "body": "name: <source_label>\ndescription: <source rationale>\ntable: <DATABASE.SCHEMA.TABLE>\nfilter: <all>\nwatermark: <WATERMARK_COLUMN>\n"
+        },
+        {
+          "label": "Source (completes another source)",
+          "detail": "Records a later event (removal, closure) for another source's rows",
+          "x-when": {
+            "source_count": {
+              "min": 1
+            }
+          },
+          "body": "name: <source_label>\ndescription: <source rationale>\ntable: <DATABASE.SCHEMA.TABLE>\nfilter: <all>\nwatermark: <WATERMARK_COLUMN>\ncompletes: <source>\nmatch: \"<match columns> where <condition>\"\n"
+        }
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/source_label"
+        },
+        "description": {
+          "$ref": "#/$defs/text"
+        },
+        "table": {
+          "$ref": "#/$defs/table_ref"
+        },
+        "filter": {
+          "description": "\"all\", or the filter intent in words.",
+          "$ref": "#/$defs/text"
+        },
+        "pick": {
+          "description": "Duplicate row selection criteria.",
+          "$ref": "#/$defs/text"
+        },
+        "watermark": {
+          "description": "Source watermark column, or \"none\".",
+          "$ref": "#/$defs/text"
+        },
+        "completes": {
+          "description": "Source label(s) whose rows this source can also close. Requires match.",
+          "x-blocks": [
+            {
+              "label": "completes",
+              "inline": true,
+              "body": "<source>"
+            }
+          ],
+          "oneOf": [
+            {
+              "$ref": "#/$defs/source_label"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/source_label"
+              }
+            }
+          ]
+        },
+        "match": {
+          "description": "Columns (model names) and condition used to find a record's existing row. Default: the grain columns.\n",
+          "$ref": "#/$defs/text"
+        },
+        "match_pick": {
+          "description": "\"all\" (default), or a rule choosing one row.",
+          "$ref": "#/$defs/text",
+          "default": "all"
+        }
+      },
+      "dependentRequired": {
+        "completes": [
+          "match"
+        ],
+        "match_pick": [
+          "match"
+        ]
+      }
+    },
+    "column": {
+      "type": "object",
+      "required": [
+        "name",
+        "data_type",
+        "description",
+        "meta"
+      ],
+      "additionalProperties": false,
+      "x-blocks": [
+        {
+          "label": "Column (read from sources)",
+          "detail": "Value read from raw data — one definitions entry per source",
+          "body": "name: <COLUMN_NAME>\ndata_type: <VARCHAR>\ndescription: \"<column description>\"\nmeta:\n  codes: [\"<CODE>\"]\n  display_name: <Column Name>\n  default_value: \"<UNKNOWN>\"\n  definitions:\n    <source>:\n      column: <DATABASE.SCHEMA.TABLE.COLUMN>\n      transform: <direct>\n"
+        },
+        {
+          "label": "Column (derived from other columns)",
+          "detail": "Value derived from columns in this model",
+          "body": "name: <COLUMN_NAME>\ndata_type: <VARCHAR>\ndescription: \"<column description>\"\nmeta:\n  codes: [\"<CODE>\"]\n  display_name: <Column Name>\n  default_value: \"<UNKNOWN>\"\n  source: <column>\n  transform: <transformation rules>\n"
+        },
+        {
+          "label": "Column (generated)",
+          "detail": "Surrogate key or other generated value",
+          "body": "name: <COLUMN_NAME>\ndata_type: <NUMBER>\ndescription: \"<column description>\"\nmeta:\n  codes: [\"<CODE>\"]\n  display_name: <Column Name>\n  default_value: \"<-1>\"\n  source: generated\n  transform: <transformation rules>\n"
+        },
+        {
+          "label": "Column (fact measure)",
+          "detail": "Measure with additivity — one definitions entry per source",
+          "x-when": {
+            "table_type": "fact"
+          },
+          "body": "name: <MEASURE_NAME>\ndata_type: <NUMBER(18,2)>\ndescription: \"<column description>\"\nmeta:\n  codes: [\"<CODE>\"]\n  display_name: <Measure Name>\n  default_value: \"<0>\"\n  additivity: <additive|semi_additive|non_additive>\n  definitions:\n    <source>:\n      column: <DATABASE.SCHEMA.TABLE.COLUMN>\n      transform: <direct>\n"
+        }
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/upper_snake"
+        },
+        "data_type": {
+          "$ref": "#/$defs/text"
+        },
+        "description": {
+          "description": "Plain text, or '{{ doc(\"<doc block name>\") }}'. No code suffix.",
+          "$ref": "#/$defs/text"
+        },
+        "meta": {
+          "$ref": "#/$defs/column_meta"
+        },
+        "data_tests": {
+          "type": "array",
+          "minItems": 1
+        }
+      }
+    },
+    "column_meta": {
+      "type": "object",
+      "required": [
+        "codes",
+        "display_name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "codes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/text"
+          }
+        },
+        "display_name": {
+          "description": "Title Case column name.",
+          "$ref": "#/$defs/text"
+        },
+        "default_value": {
+          "description": "Required except on QA columns (checked in the lint layer).",
+          "type": "string"
+        },
+        "sensitivity": {
+          "$ref": "#/$defs/text"
+        },
+        "additivity": {
+          "description": "Fact measures only.",
+          "x-when": {
+            "table_type": "fact"
+          },
+          "enum": [
+            "additive",
+            "semi_additive",
+            "non_additive"
+          ]
+        },
+        "definitions": {
+          "description": "Value read from raw data. One entry per model source, all listed.",
+          "x-when": {
+            "absent": [
+              "source",
+              "transform"
+            ]
+          },
+          "x-keys": "source",
+          "x-blocks": [
+            {
+              "label": "definitions (every source)",
+              "detail": "One entry per source in this model",
+              "body": "<source>:\n  column: <DATABASE.SCHEMA.TABLE.COLUMN>\n  transform: <direct>\n"
+            }
+          ],
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "$ref": "#/$defs/source_label"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/source_definition"
+          }
+        },
+        "source": {
+          "description": "Column(s) in this model the value is derived from, or \"generated\".",
+          "x-when": {
+            "absent": [
+              "definitions"
+            ]
+          },
+          "x-blocks": [
+            {
+              "label": "source (model column)",
+              "inline": true,
+              "body": "<column>"
+            },
+            {
+              "label": "source (generated)",
+              "inline": true,
+              "body": "generated"
+            }
+          ],
+          "oneOf": [
+            {
+              "$ref": "#/$defs/text"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/upper_snake"
+              }
+            }
+          ]
+        },
+        "transform": {
+          "x-when": {
+            "absent": [
+              "definitions"
+            ]
+          },
+          "$ref": "#/$defs/transform"
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "definitions"
+          ],
+          "properties": {
+            "source": false,
+            "transform": false
+          }
+        },
+        {
+          "required": [
+            "source",
+            "transform"
+          ],
+          "properties": {
+            "definitions": false
+          }
+        }
+      ]
+    },
+    "source_definition": {
+      "x-blocks": [
+        {
+          "label": "Column read",
+          "body": "column: <DATABASE.SCHEMA.TABLE.COLUMN>\ntransform: <direct>\n"
+        },
+        {
+          "label": "Column read through a join path",
+          "body": "column: <DATABASE.SCHEMA.TABLE.COLUMN>\ntransform: <direct>\npath:\n  - join: [\"<A.KEY = B.KEY>\"]\n    type: <left|inner>\n"
+        },
+        {
+          "label": "Priority (first non-null wins)",
+          "body": "priority:\n  - column: <DATABASE.SCHEMA.TABLE.COLUMN>\n    transform: <direct>\n  - column: <DATABASE.SCHEMA.TABLE.COLUMN>\n    transform: <direct>\ntransform: <rule when every candidate is null>\n"
+        },
+        {
+          "label": "Constant",
+          "detail": "Same value for every row of this source",
+          "body": "transform: <constant value>\n"
+        },
+        {
+          "label": "default",
+          "detail": "This source never provides a value",
+          "inline": true,
+          "body": "default"
+        }
+      ],
+      "oneOf": [
+        {
+          "description": "This source never provides a value.",
+          "const": "default"
+        },
+        {
+          "description": "Same constant value for every row of this source.",
+          "type": "object",
+          "required": [
+            "transform"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "transform": {
+              "$ref": "#/$defs/transform"
+            }
+          }
+        },
+        {
+          "$ref": "#/$defs/column_candidate"
+        },
+        {
+          "description": "First non-null candidate wins; transform applies when all are null.",
+          "type": "object",
+          "required": [
+            "priority",
+            "transform"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "priority": {
+              "type": "array",
+              "minItems": 2,
+              "items": {
+                "$ref": "#/$defs/column_candidate"
+              }
+            },
+            "transform": {
+              "$ref": "#/$defs/transform"
+            }
+          }
+        }
+      ]
+    },
+    "column_candidate": {
+      "type": "object",
+      "required": [
+        "column",
+        "transform"
+      ],
+      "additionalProperties": false,
+      "x-blocks": [
+        {
+          "label": "Candidate column",
+          "body": "column: <DATABASE.SCHEMA.TABLE.COLUMN>\ntransform: <direct>\n"
+        },
+        {
+          "label": "Candidate column through a join path",
+          "body": "column: <DATABASE.SCHEMA.TABLE.COLUMN>\ntransform: <direct>\npath:\n  - join: [\"<A.KEY = B.KEY>\"]\n    type: <left|inner>\n"
+        }
+      ],
+      "properties": {
+        "column": {
+          "$ref": "#/$defs/column_ref"
+        },
+        "transform": {
+          "$ref": "#/$defs/transform"
+        },
+        "path": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/path_step"
+          }
+        }
+      }
+    },
+    "path_step": {
+      "type": "object",
+      "required": [
+        "join",
+        "type"
+      ],
+      "additionalProperties": false,
+      "x-blocks": [
+        {
+          "label": "Path step",
+          "body": "join: [\"<A.KEY = B.KEY>\"]\ntype: <left|inner>\n"
+        }
+      ],
+      "properties": {
+        "join": {
+          "description": "Key pairs, AND-joined.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/text"
+              },
+              {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "items": {
+                  "$ref": "#/$defs/text"
+                }
+              }
+            ]
+          }
+        },
+        "type": {
+          "enum": [
+            "left",
+            "inner"
+          ]
+        },
+        "filter": {
+          "$ref": "#/$defs/text"
+        },
+        "pick": {
+          "$ref": "#/$defs/text"
+        },
+        "watermark": {
+          "description": "Column whose changes recheck already-loaded rows.",
+          "$ref": "#/$defs/text"
+        }
+      }
+    }
+  }
+}
