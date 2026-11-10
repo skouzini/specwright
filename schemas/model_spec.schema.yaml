@@ -2,13 +2,15 @@ $schema: https://json-schema.org/draft/2020-12/schema
 $id: model_spec.schema.yaml
 title: BEAM model spec
 description: >
-  Structural spec for dbt model YAML (BEAM*/Kimball dimensions and facts).
-  Covers shape, enums, required keys and single-document conditionals.
-  Cross-reference rules (definitions cover every source, completes names a
-  real source) are checked by the Specwright extension, not here.
+  dbt model YAML following BEAM*/Kimball conventions (dimensions and facts).
+  Standard dbt properties are validated by dbt Labs' schema (allOf below);
+  this file adds the conventions: required keys, naming, and the structure
+  of config.meta and column meta. Cross-reference rules (definitions cover
+  every source, completes names a real source) are checked by the
+  YAML Spec Blocks extension, not here.
 
-# ── Specwright keywords (ignored by JSON Schema validators) ─────────────
-# x-blocks  Blocks Specwright can insert as a VALUE of this schema.
+# ── YAML Spec Blocks keywords (ignored by JSON Schema validators) ─────────────
+# x-blocks  Blocks YAML Spec Blocks can insert as a VALUE of this schema.
 #           body: YAML text. Placeholders:
 #             <name>          tab stop, "name" as its default text
 #             <a|b|c>         tab stop with a dropdown of choices
@@ -18,17 +20,21 @@ description: >
 #           value, together with the lines indented under it. A bound list
 #           variable anywhere else becomes a dropdown of its values.
 #           Variables: source, column, grain_column (lists, current model);
+#           model (list, every model in the file);
 #           model_name, table_type (values, current model).
 # x-when    When a block or property is offered. Keys:
 #             table_type: fact | dimension
 #             source_count: { min: n, max: n }
 #             absent: [keys]   none of these keys in the current object
+# x-hide    On a property: never suggest this key (e.g. dbt's legacy `tests`).
 # x-keys    On a map whose keys are bound values (definitions): offer one
 #           entry per missing value of that variable.
 
+allOf:
+  # dbt Labs' schema for dbt property files (Apache-2.0), pinned; see schemas/vendor/README.md
+  - $ref: "https://cdn.jsdelivr.net/gh/dbt-labs/dbt-jsonschema@6a401244651d3b5e0fd2f7cfcfb120187118edb4/schemas/latest/dbt_yml_files-latest.json"
 type: object
 required: [version, models]
-additionalProperties: false
 properties:
   version:
     const: 2
@@ -70,7 +76,6 @@ $defs:
   model:
     type: object
     required: [name, description, config, constraints, data_tests, columns]
-    additionalProperties: false
     x-blocks:
       - label: Model
         detail: Full model skeleton with one source and one column
@@ -109,15 +114,31 @@ $defs:
                 display_name: <Column Name>
                 default_value: "<UNKNOWN>"
     properties:
+      tests: { x-hide: true }   # superseded by data_tests (dbt 1.8+)
+      meta: { x-hide: true }    # this spec keeps model meta under config.meta
       name: { $ref: "#/$defs/upper_snake" }
       description: { $ref: "#/$defs/text" }
       deprecation_date: { $ref: "#/$defs/iso_date" }
       config:
         type: object
         required: [meta]
-        additionalProperties: false
         properties:
           meta: { $ref: "#/$defs/model_meta" }
+          # dbt accepts these but its schema doesn't list them; listed here so they're suggested
+          unique_key:
+            description: Column(s) that identify a row for incremental merges.
+            anyOf: [{ type: string }, { type: array, items: { type: string } }]
+          incremental_strategy:
+            enum: [merge, append, delete+insert, insert_overwrite, microbatch]
+          merge_update_columns:
+            description: Columns a merge may update (the CV columns).
+            type: array
+            items: { type: string }
+          alias: { type: string }
+          schema: { type: string }
+          enabled: { type: boolean }
+          tags:
+            anyOf: [{ type: string }, { type: array, items: { type: string } }]
       constraints:
         description: >
           Dimensions: the surrogate key only. Facts: every grain column.
@@ -364,7 +385,6 @@ $defs:
   column:
     type: object
     required: [name, data_type, description, meta]
-    additionalProperties: false
     x-blocks:
       - label: Column (read from sources)
         detail: Value read from raw data — one definitions entry per source
@@ -421,6 +441,7 @@ $defs:
                 column: <DATABASE.SCHEMA.TABLE.COLUMN>
                 transform: <direct>
     properties:
+      tests: { x-hide: true }
       name: { $ref: "#/$defs/upper_snake" }
       data_type: { $ref: "#/$defs/text" }
       description:

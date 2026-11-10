@@ -1,0 +1,30 @@
+version: 2
+
+sources:
+  - name: shop
+    database: raw
+    schema: shop
+    tables:
+      - name: orders
+        description: "Raw orders"
+
+models:
+  - name: stg_orders
+    description: "One row per order."
+    config:
+      materialized: incremental
+      unique_key: order_id
+      incremental_strategy: merge
+    columns:
+      - name: order_id
+        description: "Order key"
+        data_tests:
+          - not_null
+          - unique
+      - name: customer_id
+        description: "Customer"
+  - name: dim_customers
+    description: "One row per customer."
+    columns:
+      - name: customer_id
+        description: "Customer key"

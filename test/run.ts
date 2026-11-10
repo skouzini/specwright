@@ -1,11 +1,12 @@
 import { readFileSync } from 'fs';
+import { loadIndex } from './loader';
 import { parse } from 'yaml';
 import { SchemaIndex } from '../src/core/schema';
 import { offersAt } from '../src/core/offers';
 import { lint } from '../src/core/lint';
 import { contextsAt, formatPath, pathAt } from '../src/core/context';
 
-const index = new SchemaIndex(parse(readFileSync(__dirname + '/../schemas/model_spec.schema.yaml', 'utf8')));
+const index = loadIndex('model_spec.schema.yaml');
 const base = readFileSync(__dirname + '/fixtures/subscriptions.yml', 'utf8');
 
 let failures = 0;
@@ -124,6 +125,15 @@ const show = (name: string, r: ReturnType<typeof offers>) =>
 {
   const i = base.indexOf('SHOP.RAW.SUBSCRIPTIONS.PLANCD');
   check('pathAt inside a definition', formatPath(pathAt(base, i) ?? []) === 'models[0] › columns[2] › meta › definitions › subscriptions › column', formatPath(pathAt(base, i) ?? []));
+}
+
+// 13. Layered on dbt's schema: standard keys appear, hidden ones don't
+{
+  const m = offers('notes: Looks good.', 4);
+  check('model keys include dbt keys (access, docs)', m.labels.includes('access') && m.labels.includes('docs'), m.labels.join(','));
+  check('model-level meta and legacy tests are hidden', !m.labels.includes('meta') && !m.labels.includes('tests'), m.labels.join(','));
+  const c = offers('notes: Looks good.', 6);
+  check('config keys: dbt (materialized) + ours (unique_key, merge_update_columns)', ['materialized', 'unique_key', 'merge_update_columns'].every((x) => c.labels.includes(x)), c.labels.join(','));
 }
 
 // 12. Lint

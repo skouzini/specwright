@@ -8,7 +8,7 @@
 
 import { parseDocument, isMap, isSeq, isScalar, Document, Node, YAMLMap } from 'yaml';
 
-export const MARK = '__specwright_cursor__';
+export const MARK = '__yaml_spec_blocks_cursor__';
 
 export type PathPart = string | number;
 
