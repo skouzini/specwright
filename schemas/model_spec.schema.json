@@ -2,13 +2,17 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "model_spec.schema.yaml",
   "title": "BEAM model spec",
-  "description": "Structural spec for dbt model YAML (BEAM*/Kimball dimensions and facts). Covers shape, enums, required keys and single-document conditionals. Cross-reference rules (definitions cover every source, completes names a real source) are checked by the YAML Spec Blocks extension, not here.\n",
+  "description": "dbt model YAML following BEAM*/Kimball conventions (dimensions and facts). Standard dbt properties are validated by dbt Labs' schema (allOf below); this file adds the conventions: required keys, naming, and the structure of config.meta and column meta. Cross-reference rules (definitions cover every source, completes names a real source) are checked by the YAML Spec Blocks extension, not here.\n",
+  "allOf": [
+    {
+      "$ref": "https://cdn.jsdelivr.net/gh/dbt-labs/dbt-jsonschema@6a401244651d3b5e0fd2f7cfcfb120187118edb4/schemas/latest/dbt_yml_files-latest.json"
+    }
+  ],
   "type": "object",
   "required": [
     "version",
     "models"
   ],
-  "additionalProperties": false,
   "properties": {
     "version": {
       "const": 2
@@ -64,7 +68,6 @@
         "data_tests",
         "columns"
       ],
-      "additionalProperties": false,
       "x-blocks": [
         {
           "label": "Model",
@@ -73,6 +76,12 @@
         }
       ],
       "properties": {
+        "tests": {
+          "x-hide": true
+        },
+        "meta": {
+          "x-hide": true
+        },
         "name": {
           "$ref": "#/$defs/upper_snake"
         },
@@ -87,10 +96,61 @@
           "required": [
             "meta"
           ],
-          "additionalProperties": false,
           "properties": {
             "meta": {
               "$ref": "#/$defs/model_meta"
+            },
+            "unique_key": {
+              "description": "Column(s) that identify a row for incremental merges.",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            },
+            "incremental_strategy": {
+              "enum": [
+                "merge",
+                "append",
+                "delete+insert",
+                "insert_overwrite",
+                "microbatch"
+              ]
+            },
+            "merge_update_columns": {
+              "description": "Columns a merge may update (the CV columns).",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "alias": {
+              "type": "string"
+            },
+            "schema": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "tags": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
             }
           }
         },
@@ -527,7 +587,6 @@
         "description",
         "meta"
       ],
-      "additionalProperties": false,
       "x-blocks": [
         {
           "label": "Column (read from sources)",
@@ -554,6 +613,9 @@
         }
       ],
       "properties": {
+        "tests": {
+          "x-hide": true
+        },
         "name": {
           "$ref": "#/$defs/upper_snake"
         },

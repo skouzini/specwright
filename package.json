@@ -1,7 +1,7 @@
 {
   "name": "yaml-spec-blocks",
   "displayName": "YAML Spec Blocks",
-  "description": "Cursor-aware block suggestions for dbt model YAML, filled from the model you're editing, plus cross-reference checks.",
+  "description": "Cursor-aware, pre-filled YAML blocks driven by a JSON Schema — for dbt property files, with an optional BEAM*/Kimball model spec preset.",
   "version": "0.2.0",
   "publisher": "skouzini",
   "license": "MIT",
@@ -31,8 +31,9 @@
   "scripts": {
     "build": "esbuild src/extension.ts --bundle --platform=node --format=cjs --external:vscode --outfile=dist/extension.js --minify --sourcemap",
     "typecheck": "tsc --noEmit",
-    "test": "tsx test/run.ts && tsx test/insert.ts",
-    "package": "npm run build && vsce package --no-dependencies"
+    "test": "npm run -s schemas && tsx test/run.ts && tsx test/insert.ts && tsx test/dbt.ts && tsx test/validate.ts",
+    "package": "npm run build && vsce package --no-dependencies",
+    "schemas": "node -e \"const y=require('yaml'),fs=require('fs');for(const f of ['dbt','model_spec'])fs.writeFileSync('schemas/'+f+'.schema.json',JSON.stringify(y.parse(fs.readFileSync('schemas/'+f+'.schema.yaml','utf8')),null,2)+'\\\\n')\""
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
@@ -41,7 +42,9 @@
     "esbuild": "^0.28.2",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
-    "yaml": "^2.9.1"
+    "vscode-languageserver-textdocument": "^1.0.16",
+    "yaml": "^2.9.1",
+    "yaml-language-server": "^2.0.0"
   },
   "contributes": {
     "commands": [
@@ -68,7 +71,20 @@
         "yamlSpecBlocks.schemaPath": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Schema file (YAML or JSON), absolute or relative to the workspace folder. Empty: `schemas/model_spec.schema.yaml` (or `.json`) in the workspace, else the schema bundled with the extension."
+          "markdownDescription": "Schema file (YAML or JSON), absolute or relative to the workspace folder. Empty: `schemas/model_spec.schema.yaml` (or `.json`) in the workspace if present, else the bundled preset (`yamlSpecBlocks.preset`)."
+        },
+        "yamlSpecBlocks.preset": {
+          "type": "string",
+          "enum": [
+            "dbt",
+            "beam"
+          ],
+          "default": "dbt",
+          "markdownEnumDescriptions": [
+            "Generic dbt property files: dbt Labs' schema plus common blocks.",
+            "BEAM*/Kimball model spec: dbt Labs' schema plus the model_spec conventions."
+          ],
+          "markdownDescription": "Bundled schema used when the workspace has no schema of its own."
         },
         "yamlSpecBlocks.include": {
           "type": "string",

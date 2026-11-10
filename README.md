@@ -5,12 +5,21 @@
 *Formerly **Specwright** (renamed in 0.2.0 to avoid clashing with several unrelated "Specwright" projects).*
 
 A VS Code extension that suggests the right YAML block for where your cursor
-is in a dbt model file, fills it in from the model you're editing, and flags
+is in a dbt property file, fills it in from the model you're editing, and flags
 cross-reference mistakes the JSON Schema can't catch.
 
-It is driven by one file, `schemas/model_spec.schema.yaml`: a JSON Schema for
-our BEAM*/Kimball model YAML, extended with a few `x-` keywords that describe
-the insertable blocks.
+It is driven by a JSON Schema extended with a few `x-` keywords that describe
+the insertable blocks. Two schemas ship with it, both layered on
+[dbt Labs' own schema](https://github.com/dbt-labs/dbt-jsonschema) for dbt
+property files:
+
+| Preset | File | For |
+|---|---|---|
+| `dbt` (default) | `schemas/dbt.schema.yaml` | Any dbt project — standard dbt validation plus blocks for models, columns, tests and sources |
+| `beam` | `schemas/model_spec.schema.yaml` | dbt models that follow the BEAM*/Kimball model spec — adds required keys, naming, and the structure of `config.meta` / column `meta` |
+
+A `schemas/model_spec.schema.yaml` (or any schema you point it at) in your
+workspace takes precedence over both.
 
 ---
 
@@ -25,7 +34,8 @@ on. YAML Spec Blocks puts that knowledge in the editor:
 
 | Need | Where it's handled |
 |---|---|
-| Shape, enums, required keys, simple conditionals | JSON Schema → validated live by the Red Hat YAML extension |
+| Standard dbt keys (`config`, `access`, `data_tests`, `versions`…) | dbt Labs' schema (vendored, `schemas/vendor/`) → Red Hat YAML extension |
+| Spec shape, enums, required keys, simple conditionals | Our schema layer → Red Hat YAML extension |
 | "What can go here?" + pre-filled blocks | YAML Spec Blocks completions (`x-blocks`, `x-when`, `x-keys`) |
 | Rules that compare one part of a file with another | YAML Spec Blocks diagnostics (`src/core/lint.ts`) |
 | Judgment calls (is this filter intent clear?) | Human / agent review — out of scope |
@@ -36,14 +46,19 @@ on. YAML Spec Blocks puts that knowledge in the editor:
 1. `npm install && npm run package` → `yaml-spec-blocks-0.2.0.vsix`
    (a built copy may already be in the folder; it's git-ignored).
 2. VS Code → Extensions → `…` → **Install from VSIX**.
-3. In the dbt repo, put the schema at `schemas/model_spec.schema.yaml`. YAML Spec Blocks
-   finds it there automatically (or set `yamlSpecBlocks.schemaPath`), reloads on
-   save, and writes a `.json` copy next to it.
-4. For validation underlines, install **YAML** (Red Hat) and add to the dbt
-   repo's `.vscode/settings.json`:
+3. Pick a schema:
+   - **Plain dbt project:** nothing to do — the `dbt` preset is used.
+   - **BEAM model spec:** copy `schemas/model_spec.schema.yaml` into the dbt repo's
+     `schemas/` folder (found automatically, reloaded on save, `.json` copy
+     written next to it), or set `"yamlSpecBlocks.preset": "beam"`.
+4. For validation underlines, install **YAML** (Red Hat) and map the schema in
+   the dbt repo's `.vscode/settings.json`:
    ```json
    "yaml.schemas": { "./schemas/model_spec.schema.json": ["models/**/_*.yml"] }
    ```
+   The schema pulls in dbt Labs' schema by a pinned jsDelivr URL, which the Red
+   Hat extension downloads once (needs network). For a plain dbt project, map
+   dbt Labs' schema directly — see [their README](https://github.com/dbt-labs/dbt-jsonschema).
 
 ### Day to day
 - Put the cursor on an **empty line, at the indentation where the new key or
@@ -59,7 +74,8 @@ on. YAML Spec Blocks puts that knowledge in the editor:
 ### Settings
 | Setting | Default | |
 |---|---|---|
-| `yamlSpecBlocks.schemaPath` | `""` | Schema file; empty = `schemas/model_spec.schema.yaml` / `.json` in the workspace, else the bundled copy |
+| `yamlSpecBlocks.schemaPath` | `""` | Schema file; empty = `schemas/model_spec.schema.yaml` / `.json` in the workspace, else the bundled preset |
+| `yamlSpecBlocks.preset` | `dbt` | Bundled schema when the workspace has none: `dbt` or `beam` |
 | `yamlSpecBlocks.include` | `**/models/**/*.{yml,yaml}` | Which YAML files YAML Spec Blocks works in |
 | `yamlSpecBlocks.suggestOnNewLine` | `true` | Open suggestions after Enter when something fits |
 | `yamlSpecBlocks.lint` | `true` | Cross-reference warnings |
@@ -87,9 +103,13 @@ cursor ──► context.ts ──► schema.ts ──► offers.ts ──► te
    Consequence: **the rest of the file must be valid YAML** for suggestions to appear.
 
 2. **What does the schema say there?** (`src/core/schema.ts`)
-   `SchemaIndex.at(path)` walks the schema by document path, following `$ref`
-   (keeping sibling keywords like `x-when` on the referring node) and searching
-   `oneOf` / `anyOf` / `allOf` branches and `additionalProperties`.
+   `SchemaIndex.atAll(path)` walks the schema by document path and returns
+   **every** schema that applies there — ours and dbt Labs' — following `$ref`
+   (also into other documents: the dbt schema's URL is mapped to the bundled copy
+   by `src/core/vendor.ts`, so nothing is fetched), keeping sibling keywords like
+   `x-when` on the referring node, and expanding `allOf` / `anyOf` / `oneOf`
+   branches and `additionalProperties`. Offers merge the layers; where both define
+   a key, ours comes first (so its `x-when` / `x-hide` / blocks win).
 
 3. **What fits?** (`src/core/offers.ts`)
    - `item` context → the list's item schema `x-blocks`, each prefixed with `- `.
@@ -159,14 +179,25 @@ x-when:
 inside that map, offer one entry per missing value, using
 `additionalProperties`' blocks as the entry body.
 
+**`x-hide: true`** — on a property: never suggest it (still validated). Used to
+hide dbt's legacy `tests` key (superseded by `data_tests`) and, in the BEAM
+preset, model-level `meta` (the spec keeps it under `config.meta`).
+
+Also bound: `model` — every model name in the file (used by the `relationships`
+test block). dbt's schema doesn't list `unique_key`, `incremental_strategy`,
+`merge_update_columns`, `alias`, `schema`, `enabled` or `tags` under model
+`config` (it accepts them anyway), so both presets declare them so they're suggested.
+
 To add a block: add an `x-blocks` entry in the right `$defs` node, save — YAML Spec Blocks reloads.
 
 ## Project layout
 
 ```
 schemas/
-  model_spec.schema.yaml   ← source of truth (edit this)
-  model_spec.schema.json   ← generated copy for the Red Hat YAML extension
+  dbt.schema.yaml          generic preset (edit the .yaml; .json is generated)
+  model_spec.schema.yaml   BEAM preset
+  *.schema.json            generated copies for the Red Hat YAML extension
+  vendor/                  dbt Labs' dbt_yml_files schema (Apache-2.0), pinned — see vendor/README.md
 src/
   extension.ts             VS Code wiring
   core/
@@ -175,10 +206,15 @@ src/
     offers.ts              context + schema + model facts → offers
     template.ts            block body → snippet (placeholders, repeats, dropdowns)
     lint.ts                SW001–SW003
+    vendor.ts              pinned URLs of vendored schemas → bundled files
 test/
-  run.ts                   engine checks at specific cursor positions (25 checks)
+  run.ts                   BEAM preset: checks at specific cursor positions
   insert.ts                applies every offer like VS Code would; asserts YAML stays valid
-  fixtures/                subscriptions.yml (2-source fact), dim_customer.yml (1-source dimension)
+  dbt.ts                   generic dbt preset: cursor checks
+  validate.ts              validation through yaml-language-server (the Red Hat extension's engine)
+  yamlls.ts, loader.ts     test helpers
+  fixtures/                subscriptions.yml (2-source fact), dim_customer.yml (1-source dimension),
+                           bad_model.yml (one violation per rule), plain_dbt.yml (generic dbt)
 ```
 `src/core` has no VS Code dependency, so it is testable with plain Node.
 
@@ -186,7 +222,7 @@ test/
 
 ```bash
 npm install
-npm test            # engine checks + insertion checks
+npm test            # cursor checks (both presets), insertion checks, validation via yaml-language-server
 npm run typecheck
 npm run build       # esbuild → dist/extension.js
 npm run package     # → yaml-spec-blocks-<version>.vsix
@@ -204,6 +240,15 @@ offer labels / snippet text. Add a case there for every new behaviour.
 - **JSON Schema + extensions, not a custom spec language.** Standard tooling
   (validators, Red Hat YAML, `check-jsonschema`) works for free; YAML Spec Blocks adds
   only what JSON Schema can't express.
+- **Layer on dbt Labs' schema, not Fivetran's.** `fivetran/dbt_yaml_schemas` was
+  last updated in 2022 and doesn't know `data_tests`, `constraints`,
+  `deprecation_date`, `contract`, `versions`, `access` or `group`.
+  `dbt-labs/dbt-jsonschema` is maintained (synced with dbt Fusion), Apache-2.0, and
+  leaves `meta` open — exactly where the BEAM conventions live. It's vendored at a
+  pinned commit so tests and the extension are deterministic and work offline.
+- **Our layer is strict only where it owns the shape** (`config.meta`, column
+  `meta`, sources, review). Model, column and `config` objects are left open so
+  dbt's schema decides which standard keys are allowed.
 - **Blocks in `x-blocks`, not `defaultSnippets`.** The Red Hat extension shows
   `defaultSnippets` itself, unfilled, which duplicated every suggestion.
 - **`definitions` vs `source`+`transform` is about where the value comes from,
@@ -231,6 +276,11 @@ offer labels / snippet text. Add a case there for every new behaviour.
   - `default_value` required except on QA columns (needs a column role)
 - Quick fixes: "add missing definitions entries" for SW001.
 - No `.vscode/launch.json` yet for F5 debugging.
+- Uses dbt Labs' `latest` (dbt Core) schema. A `latest_fusion` variant exists
+  (larger, `definitions`-based, includes column `config`); a preset for it would
+  be a small addition if you move to Fusion.
+- The Red Hat extension downloads dbt's schema by URL; behind a firewall that
+  blocks jsDelivr, point the `$ref` at a local copy of `vendor/…json` instead.
 - Origin: a Claude Design prototype ("Specwright" canvas) explored the
   fill-from-file idea with `<placeholder>` templates; this extension replaces
   its line-regex parsing with schema- and path-aware logic.

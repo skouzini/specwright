@@ -6,6 +6,7 @@ import { SchemaIndex } from './core/schema';
 import { offersAt, Offer } from './core/offers';
 import { contextsAt, pathAt, formatPath } from './core/context';
 import { lint } from './core/lint';
+import { VENDOR } from './core/vendor';
 
 let index: SchemaIndex | undefined;
 let schemaFile = '';
@@ -29,8 +30,21 @@ function schemaCandidates(): string[] {
       out.push(path.join(f.uri.fsPath, 'schemas', 'model_spec.schema.json'));
     });
   }
-  out.push(ext.asAbsolutePath(path.join('schemas', 'model_spec.schema.yaml')));
+  // No schema in the workspace: a bundled preset.
+  const preset = cfg().get<string>('preset', 'dbt') === 'beam' ? 'model_spec' : 'dbt';
+  out.push(ext.asAbsolutePath(path.join('schemas', `${preset}.schema.yaml`)));
   return out;
+}
+
+/** Schemas referenced by URL (dbt Labs' schema) resolve to bundled copies, offline. */
+function loadReferenced(uri: string): Record<string, any> | undefined {
+  const file = VENDOR[uri];
+  if (!file) return undefined;
+  try {
+    return JSON.parse(fs.readFileSync(ext.asAbsolutePath(path.join('schemas', 'vendor', file)), 'utf8'));
+  } catch {
+    return undefined;
+  }
 }
 
 function loadSchema(): void {
@@ -38,7 +52,7 @@ function loadSchema(): void {
     if (!fs.existsSync(file)) continue;
     try {
       const data = parse(fs.readFileSync(file, 'utf8'));
-      index = new SchemaIndex(data);
+      index = new SchemaIndex(data, loadReferenced);
       schemaFile = file;
       syncJson(file, data);
       return;

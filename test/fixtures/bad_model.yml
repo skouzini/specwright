@@ -1,0 +1,37 @@
+version: 2
+models:
+  - name: dim_customer
+    description: "x"
+    config:
+      meta:
+        table_type: dimension
+        fact_type: transaction
+        status: live
+        grain: one row per customer
+        combine: union
+        sources:
+          - name: Customers
+            description: x
+            table: CUSTOMERS
+            filter: all
+            watermark: none
+            completes: other
+        review: { verified_date: "2026-11-01", verified_by: J, verified_against: x, notes: x }
+    access: secret
+    constraints:
+      - type: primary_key
+        columns: [CUSTOMER_KEY, CUSTOMER_ID]
+    data_tests:
+      - not_null
+    columns:
+      - name: CUSTOMER_KEY
+        data_type: NUMBER
+        description: x
+        descriptin: typo
+        meta:
+          codes: [CK]
+          display_name: Customer Key
+          additivity: additive
+          source: generated
+          transform: hash
+          definitions: { customers: default }

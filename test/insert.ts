@@ -1,9 +1,10 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { loadIndex } from './loader';
 import { parse, parseDocument } from 'yaml';
 import { SchemaIndex } from '../src/core/schema';
 import { offersAt } from '../src/core/offers';
 
-const index = new SchemaIndex(parse(readFileSync(__dirname + '/../schemas/model_spec.schema.yaml', 'utf8')));
+const index = loadIndex('model_spec.schema.yaml');
 const base = readFileSync(__dirname + '/fixtures/subscriptions.yml', 'utf8');
 
 // Resolve a snippet the way accepting every default would, then apply VS Code's

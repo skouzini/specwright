@@ -1,9 +1,14 @@
-// Walk a JSON Schema by document path, following $ref and the branches of
-// oneOf/anyOf/allOf where a property or list item is declared.
+// Walk JSON Schemas by document path. Follows $ref (including into other
+// schema documents, e.g. dbt Labs' schema referenced by URL) and collects
+// every schema that applies at a path, across allOf/anyOf/oneOf branches,
+// so suggestions can merge our conventions with the standard dbt keys.
 
 import type { PathPart } from './context';
 
 export type Schema = Record<string, any>;
+
+/** Returns the schema document for a URI (no fragment), or undefined. */
+export type Loader = (uri: string) => Schema | undefined;
 
 export interface Block {
   label: string;
@@ -19,74 +24,121 @@ export interface When {
   absent?: string[];
 }
 
-export class SchemaIndex {
-  constructor(public readonly root: Schema) {}
+const isObj = (v: unknown): v is Schema => !!v && typeof v === 'object' && !Array.isArray(v);
 
-  /** Follow $ref; keep sibling keywords (x-when etc.) of the referring node. */
-  resolve(s: unknown, depth = 0): Schema | undefined {
-    if (!s || typeof s !== 'object') return undefined;
-    const node = s as Schema;
-    if (typeof node.$ref === 'string' && depth < 32) {
-      const target = this.lookup(node.$ref);
-      const { $ref, ...rest } = node;
-      const resolved = this.resolve(target, depth + 1);
-      return resolved ? { ...resolved, ...rest } : rest;
+/** Make a loaded document's local refs ("#/...") absolute ("<uri>#/..."). */
+function absolutize(node: unknown, uri: string): unknown {
+  if (Array.isArray(node)) return node.map((n) => absolutize(n, uri));
+  if (!isObj(node)) return node;
+  const out: Schema = {};
+  for (const [k, v] of Object.entries(node)) {
+    out[k] = k === '$ref' && typeof v === 'string' && v.startsWith('#') ? uri + v : absolutize(v, uri);
+  }
+  return out;
+}
+
+export class SchemaIndex {
+  private docs = new Map<string, Schema | undefined>();
+
+  constructor(public readonly root: Schema, private readonly loader?: Loader) {
+    this.docs.set('', root);
+  }
+
+  private doc(uri: string): Schema | undefined {
+    if (!this.docs.has(uri)) {
+      const d = this.loader?.(uri);
+      this.docs.set(uri, d ? (absolutize(d, uri) as Schema) : undefined);
     }
-    return node;
+    return this.docs.get(uri);
   }
 
   private lookup(ref: string): unknown {
-    if (!ref.startsWith('#/')) return undefined;
-    let cur: any = this.root;
-    for (const part of ref.slice(2).split('/')) {
-      cur = cur?.[part.replace(/~1/g, '/').replace(/~0/g, '~')];
+    const hash = ref.indexOf('#');
+    const uri = hash < 0 ? ref : ref.slice(0, hash);
+    const frag = hash < 0 ? '' : ref.slice(hash + 1);
+    let cur: any = this.doc(uri);
+    if (!frag || frag === '/') return cur;
+    for (const part of frag.replace(/^\//, '').split('/')) {
+      cur = cur?.[decodeURIComponent(part).replace(/~1/g, '/').replace(/~0/g, '~')];
     }
     return cur;
   }
 
-  private branches(s: Schema): Schema[] {
-    return [...(s.oneOf ?? []), ...(s.anyOf ?? []), ...(s.allOf ?? [])];
+  /** Follow $ref; keep sibling keywords (x-when etc.) of the referring node. */
+  resolve(s: unknown, depth = 0): Schema | undefined {
+    if (!isObj(s)) return undefined;
+    if (typeof s.$ref === 'string' && depth < 32) {
+      const { $ref, ...rest } = s;
+      const resolved = this.resolve(this.lookup($ref), depth + 1);
+      return resolved ? { ...resolved, ...rest } : rest;
+    }
+    return s;
   }
 
-  child(s: unknown, key: PathPart, depth = 0): Schema | undefined {
+  private branches(s: Schema): unknown[] {
+    return [...(s.allOf ?? []), ...(s.anyOf ?? []), ...(s.oneOf ?? [])];
+  }
+
+  /** A schema plus every allOf/anyOf/oneOf branch under it, resolved. */
+  expand(s: unknown, depth = 0, seen = new Set<Schema>()): Schema[] {
     const r = this.resolve(s);
-    if (!r || depth > 8) return undefined;
-    if (typeof key === 'number') {
-      if (r.items && typeof r.items === 'object') return r.items;
-    } else {
-      if (r.properties && key in r.properties) return r.properties[key];
+    if (!r || depth > 12 || seen.has(r)) return [];
+    seen.add(r);
+    return [r, ...this.branches(r).flatMap((b) => this.expand(b, depth + 1, seen))];
+  }
+
+  /** Every schema that describes child `key` of a value matching `s`. */
+  children(s: unknown, key: PathPart): Schema[] {
+    const out: Schema[] = [];
+    for (const r of this.expand(s)) {
+      if (typeof key === 'number') {
+        if (isObj(r.items)) out.push(r.items);
+      } else if (isObj(r.properties) && isObj(r.properties[key])) {
+        out.push(r.properties[key]);
+      } else if (isObj(r.additionalProperties) && !(isObj(r.properties) && key in r.properties)) {
+        out.push(r.additionalProperties);
+      }
     }
-    for (const b of this.branches(r)) {
-      const hit = this.child(b, key, depth + 1);
-      if (hit) return hit;
+    return out;
+  }
+
+  /** All schemas (expanded) that apply at a document path, ours first. */
+  atAll(path: PathPart[]): Schema[] {
+    let cur: unknown[] = [this.root];
+    for (const p of path) {
+      cur = cur.flatMap((s) => this.children(s, p));
+      if (!cur.length) return [];
     }
-    if (typeof key === 'string' && r.additionalProperties && typeof r.additionalProperties === 'object') {
-      return r.additionalProperties;
-    }
-    return undefined;
+    const out: Schema[] = [];
+    const seen = new Set<Schema>();
+    for (const s of cur) for (const e of this.expand(s)) if (!seen.has(e)) { seen.add(e); out.push(e); }
+    return out;
   }
 
   at(path: PathPart[]): Schema | undefined {
-    let cur: Schema | undefined = this.root;
-    for (const p of path) {
-      cur = this.child(cur, p);
-      if (!cur) return undefined;
+    return this.atAll(path)[0];
+  }
+
+  /** Properties declared across the schemas; the first definition of a key wins. */
+  properties(schemas: Schema[]): Array<[string, Schema]> {
+    const props = new Map<string, Schema>();
+    for (const s of schemas) {
+      if (!isObj(s.properties)) continue;
+      for (const [k, v] of Object.entries(s.properties)) {
+        if (isObj(v) && !props.has(k)) props.set(k, v);
+      }
     }
-    return this.resolve(cur);
+    return [...props.entries()];
   }
 
-  /** Properties declared on the node itself (not branch-only ones). */
-  properties(s: Schema): Array<[string, Schema]> {
-    const props: Record<string, Schema> = { ...(s.properties ?? {}) };
-    return Object.entries(props).filter(([, v]) => (v as unknown) !== false);
+  required(schemas: Schema[]): Set<string> {
+    const out = new Set<string>();
+    for (const s of schemas) if (Array.isArray(s.required)) s.required.forEach((r: string) => out.add(r));
+    return out;
   }
 
-  required(s: Schema): Set<string> {
-    return new Set<string>(Array.isArray(s.required) ? s.required : []);
-  }
-
-  blocks(s: Schema | undefined): Block[] {
-    const b = s?.['x-blocks'];
-    return Array.isArray(b) ? b : [];
+  blocks(schemas: Schema | Schema[] | undefined): Block[] {
+    const list = Array.isArray(schemas) ? schemas : schemas ? [schemas] : [];
+    return list.flatMap((s) => (Array.isArray(s?.['x-blocks']) ? s['x-blocks'] : []));
   }
 }

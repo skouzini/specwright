@@ -1,0 +1,126 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: dbt.schema.yaml
+title: dbt property files (generic)
+description: >
+  Validation comes entirely from dbt Labs' schema (allOf below). This file
+  only adds insertable blocks (x-blocks) for YAML Spec Blocks, so it works on
+  any dbt project. For the BEAM*/Kimball conventions, use model_spec.schema.yaml.
+  Keywords: see the comment at the top of model_spec.schema.yaml.
+
+allOf:
+  # dbt Labs' schema for dbt property files (Apache-2.0), pinned; see vendor/README.md
+  - $ref: "https://cdn.jsdelivr.net/gh/dbt-labs/dbt-jsonschema@6a401244651d3b5e0fd2f7cfcfb120187118edb4/schemas/latest/dbt_yml_files-latest.json"
+
+properties:
+  models:
+    items: { $ref: "#/$defs/model" }
+  sources:
+    items: { $ref: "#/$defs/source" }
+
+$defs:
+
+  model:
+    x-blocks:
+      - label: Model
+        detail: name, description and a first column
+        body: |
+          name: <model_name>
+          description: "<model description>"
+          columns:
+            - name: <column_name>
+              description: "<column description>"
+              data_tests:
+                - not_null
+    properties:
+      tests: { x-hide: true }        # superseded by data_tests (dbt 1.8+)
+      config:
+        properties:
+          # dbt accepts these but its schema doesn't list them; listed here so they're suggested
+          unique_key:
+            description: Column(s) that identify a row for incremental merges.
+            anyOf: [{ type: string }, { type: array, items: { type: string } }]
+          incremental_strategy:
+            enum: [merge, append, delete+insert, insert_overwrite, microbatch]
+          merge_update_columns:
+            description: Columns a merge may update (the CV columns).
+            type: array
+            items: { type: string }
+          alias: { type: string }
+          schema: { type: string }
+          enabled: { type: boolean }
+          tags:
+            anyOf: [{ type: string }, { type: array, items: { type: string } }]
+      columns:
+        items: { $ref: "#/$defs/column" }
+      data_tests:
+        items: { $ref: "#/$defs/model_test" }
+
+  model_test:
+    x-blocks:
+      - label: unique_combination_of_columns
+        detail: dbt_utils — grain test across several columns
+        body: |
+          dbt_utils.unique_combination_of_columns:
+            arguments:
+              combination_of_columns:
+                - <column>
+
+  column:
+    x-blocks:
+      - label: Column
+        body: |
+          name: <column_name>
+          description: "<column description>"
+      - label: Column (key)
+        detail: not_null + unique
+        body: |
+          name: <column_name>
+          description: "<column description>"
+          data_tests:
+            - not_null
+            - unique
+    properties:
+      tests: { x-hide: true }
+      data_tests:
+        items: { $ref: "#/$defs/column_test" }
+
+  column_test:
+    x-blocks:
+      - label: not_null
+        inline: true
+        body: not_null
+      - label: unique
+        inline: true
+        body: unique
+      - label: accepted_values
+        detail: dbt 1.10+ arguments syntax
+        body: |
+          accepted_values:
+            arguments:
+              values: ["<value>"]
+      - label: relationships
+        detail: dbt 1.10+ arguments syntax — `to` lists the models in this file
+        body: |
+          relationships:
+            arguments:
+              to: ref('<model>')
+              field: <column_name>
+
+  source:
+    x-blocks:
+      - label: Source
+        body: |
+          name: <source_name>
+          database: <database>
+          schema: <schema>
+          tables:
+            - name: <table_name>
+              description: "<table description>"
+    properties:
+      tables:
+        items:
+          x-blocks:
+            - label: Table
+              body: |
+                name: <table_name>
+                description: "<table description>"
