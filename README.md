@@ -276,6 +276,11 @@ offer labels / snippet text. Add a case there for every new behaviour.
   - `default_value` required except on QA columns (needs a column role)
 - Quick fixes: "add missing definitions entries" for SW001.
 - No `.vscode/launch.json` yet for F5 debugging.
+- **Column `meta` placement.** dbt 1.10 moved column `meta` under column
+  `config:`; the BEAM spec (and dbt Labs' Core schema used here) still put it on
+  the column itself. See `docs/sql-generation.md` → Prerequisites.
+- **SQL generation** from the spec is investigated (not built) in
+  [`docs/sql-generation.md`](docs/sql-generation.md).
 - Uses dbt Labs' `latest` (dbt Core) schema. A `latest_fusion` variant exists
   (larger, `definitions`-based, includes column `config`); a preset for it would
   be a small addition if you move to Fusion.
